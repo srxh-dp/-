@@ -1,242 +1,451 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>复古 SVG 电视 (兼容版)</title>
-    <style>
-        :root {
-            --tv-width: 800px;
-            --tv-height: 600px;
-            --screen-width: 560px;
-            --screen-height: 420px;
-            --screen-left-offset: 40px;
-            --screen-top-offset: 90px;
-        }
+import React, { useState, useRef, useEffect } from 'react';
+import { Power, RotateCw, Menu as MenuIcon, Film, Volume2, VolumeX, Music, Tv } from 'lucide-react';
 
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #2c3e50;
-            margin: 0;
-            font-family: sans-serif;
-        }
+const UltimateRetroTV = () => {
+  const [isOn, setIsOn] = useState(false);
+  const [isTurningOff, setIsTurningOff] = useState(false);
+  const [currentChannel, setCurrentChannel] = useState(0);
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [volume, setVolume] = useState(40);
+  const [isMuted, setIsMuted] = useState(false);
+  const videoRef = useRef(null);
 
-        .tv-container {
-            position: relative;
-            width: var(--tv-width);
-            height: var(--tv-height);
-            /* 禁止选中文字，防止点击过快选中文本 */
-            user-select: none; 
-        }
+  // 模拟视频源
+  const channels = [
+    { id: 0, name: "智能点播系统", type: "menu" },
+    { 
+      id: 1, 
+      name: "经典影院: 大雄兔", 
+      type: "video", 
+      src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg"
+    },
+    { 
+      id: 2, 
+      name: "午夜科幻: 大象之梦", 
+      type: "video", 
+      src: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+      poster: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg"
+    },
+    { id: 3, name: "SMPTE 彩条测试", type: "static" },
+    { id: 4, name: "宇宙背景辐射", type: "noise" }
+  ];
 
-        .video-layer {
-            position: absolute;
-            top: var(--screen-top-offset);
-            left: var(--screen-left-offset);
-            width: var(--screen-width);
-            height: var(--screen-height);
-            background-color: #000;
-            overflow: hidden;
-            border-radius: 40px;
-            z-index: 1;
-        }
+  // 开关机逻辑（含动画状态管理）
+  const togglePower = () => {
+    if (isOn) {
+      // 触发关机动画
+      setIsTurningOff(true);
+      setTimeout(() => {
+        setIsOn(false);
+        setIsTurningOff(false);
+      }, 600); // 动画持续时间
+    } else {
+      setIsOn(true);
+    }
+  };
 
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            filter: contrast(1.1) sepia(0.3);
-        }
-
-        /* 错误提示信息样式 */
-        #error-msg {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #0f0; /* 绿色复古字 */
-            font-family: monospace;
-            text-align: center;
-            display: none; /* 默认隐藏 */
-            z-index: 5;
-            width: 80%;
-        }
-
-        .crt-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: repeating-linear-gradient(
-                to bottom,
-                transparent 0px,
-                transparent 2px,
-                rgba(0, 0, 0, 0.1) 3px,
-                rgba(0, 0, 0, 0.1) 4px
-            );
-            pointer-events: none;
-            z-index: 2;
-            box-shadow: inset 0 0 50px rgba(0,0,0,0.6);
-        }
-
-        .svg-frame-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            pointer-events: none;
-        }
-
-        .knob-group {
-            cursor: pointer;
-            pointer-events: auto;
-            transition: transform 0.1s ease;
-        }
-
-        .knob-group:active {
-            transform: scale(0.95);
-        }
-
-        .channel-indicator.active {
-            fill: #ff3333;
-            filter: drop-shadow(0 0 8px #ff3333);
-        }
-
-        /* 简单的操作提示 */
-        .hint {
-            position: absolute;
-            bottom: -40px;
-            color: #fff;
-            opacity: 0.7;
-        }
-    </style>
-</head>
-<body>
-
-<div class="tv-container">
-    <div class="video-layer">
-        <video id="tvScreen" loop muted playsinline poster="">
-            <source src="" type="video/mp4">
-        </video>
-        
-        <div id="error-msg">
-            NO SIGNAL<br>
-            <span style="font-size:12px; color:#aaa">如果无法播放，请尝试更换网络或使用 Live Server</span>
-        </div>
-
-        <div class="crt-overlay"></div>
-    </div>
-
-    <svg class="svg-frame-layer" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-            <linearGradient id="woodGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" style="stop-color:#8B4513" />
-                <stop offset="50%" style="stop-color:#A0522D" />
-                <stop offset="100%" style="stop-color:#8B4513" />
-            </linearGradient>
-             <linearGradient id="metalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#eee;" />
-                <stop offset="100%" style="stop-color:#999;" />
-            </linearGradient>
-            <pattern id="woodPattern" width="100" height="100" patternUnits="userSpaceOnUse">
-                <rect width="100" height="100" fill="url(#woodGradient)"/>
-                <path d="M0 0 Q 50 50 100 0 M0 20 Q 50 70 100 20" stroke="#5c3a21" stroke-width="2" fill="none" opacity="0.2"/>
-            </pattern>
-        </defs>
-
-        <rect x="10" y="20" width="780" height="560" rx="30" ry="30" fill="url(#woodPattern)" stroke="#3e1f0a" stroke-width="6"/>
-        <rect x="35" y="85" width="570" height="430" rx="40" ry="40" fill="#222" stroke="#000" stroke-width="4"/>
-        
-        <rect x="620" y="85" width="150" height="430" rx="10" ry="10" fill="#d2b48c" opacity="0.3" stroke="#8B4513" />
-
-        <g class="knob-group" id="channel-a-btn" transform="translate(695, 180)">
-            <circle cx="0" cy="0" r="45" fill="url(#metalGradient)" stroke="#333" stroke-width="2"/>
-            <rect x="-6" y="-35" width="12" height="24" fill="#333" rx="2"/>
-            <text x="0" y="70" text-anchor="middle" font-weight="bold" fill="#4a2c18" style="font-size: 14px">频道 A</text>
-             <circle class="channel-indicator" id="ind-a" cx="0" cy="-60" r="6" fill="#500" stroke="#222"/>
-        </g>
-
-        <g class="knob-group" id="channel-b-btn" transform="translate(695, 320)">
-            <circle cx="0" cy="0" r="45" fill="url(#metalGradient)" stroke="#333" stroke-width="2" transform="rotate(45)"/>
-            <rect x="-6" y="-35" width="12" height="24" fill="#333" rx="2" transform="rotate(45)"/>
-            <text x="0" y="70" text-anchor="middle" font-weight="bold" fill="#4a2c18" style="font-size: 14px">频道 B</text>
-             <circle class="channel-indicator" id="ind-b" cx="42" cy="-42" r="6" fill="#500" stroke="#222"/>
-        </g>
-        
-        <text x="400" y="560" text-anchor="middle" font-family="monospace" font-size="20" fill="#ccaa88" letter-spacing="3">SONY-RETRO</text>
-    </svg>
+  // 切换频道（带雪花过渡）
+  const changeChannel = (direction) => {
+    if (!isOn) return;
     
-    <div class="hint">点击右侧旋钮切换频道</div>
-</div>
+    // 触发换台雪花
+    setIsSwitching(true);
+    
+    setTimeout(() => {
+      let next = currentChannel + direction;
+      if (next >= channels.length) next = 0;
+      if (next < 0) next = channels.length - 1;
+      setCurrentChannel(next);
+      
+      // 雪花持续一小段时间后消失
+      setTimeout(() => setIsSwitching(false), 300);
+    }, 150);
+  };
 
-<script>
-    // 使用兼容性更好的 W3Schools 和 MDN 测试源
-    const channels = {
-        'a': {
-            // W3Schools 的 Big Buck Bunny 示例
-            src: 'https://www.w3schools.com/html/mov_bbb.mp4', 
-            indicatorId: 'ind-a'
-        },
-        'b': {
-            // MDN 的花朵示例
-            src: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', 
-            indicatorId: 'ind-b'
-        }
-    };
+  const selectChannel = (index) => {
+    if (index === currentChannel) return;
+    setIsSwitching(true);
+    setTimeout(() => {
+      setCurrentChannel(index);
+      setTimeout(() => setIsSwitching(false), 300);
+    }, 150);
+  };
 
-    const videoElement = document.getElementById('tvScreen');
-    const errorMsg = document.getElementById('error-msg');
-    let currentChannel = null;
+  // 音量/静音控制
+  const toggleMute = () => setIsMuted(!isMuted);
 
-    // 监听视频加载错误
-    videoElement.onerror = function() {
-        console.error("视频加载失败。可能是网络问题或跨域限制。");
-        errorMsg.style.display = 'block';
-        errorMsg.innerHTML = "VIDEO ERROR<br>无法加载视频源<br>请检查网络";
-    };
+  // 视频播放控制
+  useEffect(() => {
+    if (isOn && !isSwitching && videoRef.current && channels[currentChannel].type === 'video') {
+      videoRef.current.volume = isMuted ? 0 : volume / 100;
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => console.log("Auto-play prevented"));
+      }
+    }
+  }, [isOn, isSwitching, currentChannel, isMuted, volume]);
 
-    function switchChannel(channelKey) {
-        if (currentChannel === channelKey) return;
-        
-        currentChannel = channelKey;
-        const channelData = channels[channelKey];
+  // --- 子组件：屏幕内容 ---
+  const ScreenContent = () => {
+    const channel = channels[currentChannel];
 
-        // 隐藏错误信息
-        errorMsg.style.display = 'none';
-
-        // 切换 UI 状态
-        document.querySelectorAll('.channel-indicator').forEach(ind => ind.classList.remove('active'));
-        document.getElementById(channelData.indicatorId).classList.add('active');
-
-        // 视频切换逻辑
-        videoElement.pause();
-        // 设置为静音以确保现代浏览器允许自动播放
-        videoElement.muted = true; 
-        videoElement.src = channelData.src;
-        
-        videoElement.play().then(() => {
-            console.log("播放成功");
-            // 如果你想尝试开启声音，可以在这里设置 videoElement.muted = false;
-        }).catch(e => {
-            console.log("自动播放被拦截:", e);
-            errorMsg.style.display = 'block';
-            errorMsg.innerHTML = "AUTO-PLAY BLOCKED<br>请点击屏幕或与页面交互";
-        });
+    // 如果正在换台，显示雪花
+    if (isSwitching) {
+      return (
+        <div className="w-full h-full bg-black relative overflow-hidden">
+          <NoiseOverlay opacity={0.8} />
+          <div className="absolute inset-0 flex items-center justify-center text-green-500 font-mono text-xl tracking-widest z-20">
+            SEEKING...
+          </div>
+        </div>
+      );
     }
 
-    // 绑定点击事件
-    document.getElementById('channel-a-btn').addEventListener('click', () => switchChannel('a'));
-    document.getElementById('channel-b-btn').addEventListener('click', () => switchChannel('b'));
-    
-    // 初始化提示：第一次点击任意旋钮开始
-    console.log("系统就绪，请点击旋钮。");
-</script>
+    if (channel.type === 'menu') {
+      return (
+        <div className="w-full h-full bg-[#0000AA] text-white p-4 font-mono overflow-y-auto custom-scrollbar flex flex-col relative">
+          <div className="text-center border-b-2 border-white mb-2 pb-1">
+            <h2 className="text-xl font-bold text-yellow-300 shadow-black drop-shadow-md">VOD SYSTEM v1.0</h2>
+          </div>
+          <div className="flex-1 space-y-2">
+            {channels.map((ch, idx) => (
+              ch.id !== 0 && (
+                <div 
+                  key={ch.id}
+                  onClick={() => selectChannel(idx)}
+                  className="group cursor-pointer flex items-center p-2 hover:bg-white hover:text-[#0000AA] transition-colors border border-transparent hover:border-white"
+                >
+                  <span className="w-8 font-bold">{ch.id}.</span>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm uppercase">{ch.name}</div>
+                  </div>
+                  {ch.type === 'video' && <Film size={14} />}
+                  {ch.type === 'static' && <Tv size={14} />}
+                </div>
+              )
+            ))}
+          </div>
+          <div className="mt-auto text-[10px] text-center text-cyan-300 animate-pulse">
+            PRESS KNOB TO SELECT
+          </div>
+          {/* 扫描线覆盖在菜单上 */}
+          <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,6px_100%]" />
+        </div>
+      );
+    }
 
-</body>
-</html>
+    if (channel.type === 'video') {
+      return (
+        <div className="w-full h-full bg-black relative">
+          <video
+            ref={videoRef}
+            src={channel.src}
+            poster={channel.poster}
+            className="w-full h-full object-cover"
+            loop
+            playsInline
+          />
+          <div className="absolute top-4 right-4 text-green-500 font-mono text-lg font-bold opacity-60 drop-shadow-md pointer-events-none">
+            CH {channel.id < 10 ? '0'+channel.id : channel.id}
+          </div>
+        </div>
+      );
+    }
+
+    if (channel.type === 'static') {
+      return (
+        <div className="w-full h-full flex flex-col bg-gray-100">
+           <div className="h-[70%] w-full flex">
+             <div className="flex-1 bg-white" />
+             <div className="flex-1 bg-yellow-400" />
+             <div className="flex-1 bg-cyan-400" />
+             <div className="flex-1 bg-green-500" />
+             <div className="flex-1 bg-purple-500" />
+             <div className="flex-1 bg-red-500" />
+             <div className="flex-1 bg-blue-700" />
+           </div>
+           <div className="h-[10%] w-full flex">
+             <div className="flex-1 bg-blue-700" />
+             <div className="flex-1 bg-black" />
+             <div className="flex-1 bg-purple-500" />
+             <div className="flex-1 bg-black" />
+             <div className="flex-1 bg-cyan-400" />
+             <div className="flex-1 bg-black" />
+             <div className="flex-1 bg-gray-300" />
+           </div>
+           <div className="h-[20%] w-full bg-[#111] flex items-center justify-center">
+             <span className="text-white font-mono text-xl tracking-[0.5em] animate-pulse">NO SIGNAL</span>
+           </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full h-full bg-black relative">
+        <NoiseOverlay />
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <span className="text-white font-mono text-4xl font-bold opacity-50 blur-[1px]">CH {channel.id}</span>
+        </div>
+      </div>
+    );
+  };
+
+  // 雪花组件
+  const NoiseOverlay = ({ opacity = 1 }) => (
+    <div className="absolute inset-0 pointer-events-none" style={{
+      opacity: opacity,
+      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+      filter: 'contrast(170%) brightness(1000%) grayscale(100%)'
+    }}></div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#e8dac0] flex flex-col items-center justify-center p-4 select-none font-sans">
+      
+      <div className="mb-4 text-center">
+        <h1 className="text-3xl font-black text-[#5a3a2a] tracking-tighter" style={{ fontFamily: 'Times New Roman, serif' }}>
+          RetroVision <span className="text-[#c24e00]">XR</span>
+        </h1>
+        <p className="text-[#8b5e3c] text-xs font-bold tracking-widest uppercase mt-1">Solid State • Color Television</p>
+      </div>
+
+      {/* 电视机主体容器 (严格保持 4:3 比例) */}
+      <div className="relative w-full max-w-[800px] aspect-[4/3] shadow-[0_50px_60px_-15px_rgba(0,0,0,0.5)] rounded-[40px]">
+        
+        {/* SVG 机身 */}
+        <svg viewBox="0 0 800 600" className="w-full h-full rounded-[40px] overflow-visible">
+          <defs>
+            {/* 木纹滤镜 */}
+            <filter id="woodGrain">
+              <feTurbulence type="fractalNoise" baseFrequency="0.02 0.005" numOctaves="5" result="noise" />
+              <feDiffuseLighting in="noise" lightingColor="#a66e4e" surfaceScale="2">
+                <feDistantLight azimuth="45" elevation="60" />
+              </feDiffuseLighting>
+              <feComposite operator="in" in2="SourceGraphic"/>
+            </filter>
+            
+            {/* 扬声器网孔图案 */}
+            <pattern id="speakerPattern" x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.5" fill="#111" />
+            </pattern>
+            
+            {/* 旋钮金属纹理 */}
+            <linearGradient id="knobGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#444" />
+              <stop offset="50%" stopColor="#222" />
+              <stop offset="100%" stopColor="#111" />
+            </linearGradient>
+          </defs>
+
+          {/* 1. 机身主体 (带木纹) */}
+          <rect x="0" y="0" width="800" height="600" rx="40" fill="#6d4c41" />
+          <rect x="0" y="0" width="800" height="600" rx="40" fill="#5D4037" filter="url(#woodGrain)" opacity="0.6" />
+          
+          {/* 边框高光 */}
+          <rect x="10" y="10" width="780" height="580" rx="30" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
+          <rect x="0" y="0" width="800" height="600" rx="40" fill="none" stroke="#3e2723" strokeWidth="8" />
+
+          {/* 2. 黑色前面板区域 */}
+          <path d="M 60 80 H 550 A 20 20 0 0 1 570 100 V 500 A 20 20 0 0 1 550 520 H 60 A 20 20 0 0 1 40 500 V 100 A 20 20 0 0 1 60 80 Z" fill="#1a1a1a" stroke="#000" strokeWidth="6" />
+          
+          {/* 3. 控制面板底板 */}
+          <rect x="600" y="80" width="160" height="440" rx="10" fill="#2d2d2d" stroke="#111" strokeWidth="3" />
+          <rect x="610" y="90" width="140" height="420" rx="5" fill="#1a1a1a" />
+
+          {/* 4. 扬声器网格 */}
+          <rect x="620" y="320" width="120" height="120" fill="url(#speakerPattern)" opacity="0.6" />
+          
+          {/* 装饰线条 */}
+          <line x1="620" y1="290" x2="740" y2="290" stroke="#444" strokeWidth="2" />
+          <line x1="620" y1="295" x2="740" y2="295" stroke="#444" strokeWidth="2" />
+
+          {/* 5. 品牌 Logo */}
+          <rect x="250" y="535" width="100" height="25" rx="4" fill="#111" />
+          <text x="300" y="552" textAnchor="middle" fill="#aaa" fontFamily="serif" fontSize="14" letterSpacing="3" fontWeight="bold">LUMINA</text>
+
+          {/* 6. 天线 */}
+          <path d="M350 0 L250 -100" stroke="#888" strokeWidth="6" strokeLinecap="round" />
+          <path d="M450 0 L550 -100" stroke="#888" strokeWidth="6" strokeLinecap="round" />
+        </svg>
+
+        {/* --- 屏幕容器 (绝对定位) --- 
+            SVG Viewbox: 800x600
+            Screen Area (Visual): x=40+stroke, y=80+stroke. 
+            Refined Math: 
+            X: 50 / 800 = 6.25%
+            Y: 90 / 600 = 15%
+            W: 510 / 800 = 63.75%
+            H: 420 / 600 = 70%
+        */}
+        <div 
+          className="absolute overflow-hidden bg-[#050505]"
+          style={{
+            top: '15%',
+            left: '6.25%',
+            width: '63.75%',
+            height: '70%',
+            borderRadius: '16px', // 配合 SVG 的圆角
+            boxShadow: 'inset 0 0 40px rgba(0,0,0,1)'
+          }}
+        >
+          {/* 屏幕玻璃反光层 (始终存在) */}
+          <div className="absolute inset-0 z-30 pointer-events-none rounded-[16px] shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] bg-gradient-to-br from-white/10 via-transparent to-transparent opacity-50 mix-blend-overlay"></div>
+          
+          {/* CRT 弧度遮罩 (四角暗角) */}
+          <div className="absolute inset-0 z-20 pointer-events-none rounded-[16px] shadow-[inset_0_0_50px_rgba(0,0,0,0.9)]"></div>
+
+          {/* --- 核心显示区域 --- */}
+          <div className={`w-full h-full relative transition-all duration-200 ${isOn ? 'opacity-100' : 'opacity-0'}`}>
+            
+            {/* 关机/开机动画容器 */}
+            <div 
+              className="w-full h-full bg-black origin-center overflow-hidden"
+              style={{
+                animation: isTurningOff 
+                  ? 'turnOff 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards' 
+                  : isOn 
+                    ? 'turnOn 0.4s ease-out forwards' 
+                    : 'none'
+              }}
+            >
+              <ScreenContent />
+              
+              {/* 扫描线纹理 (开机时显示) */}
+              <div className="absolute inset-0 pointer-events-none z-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] mix-blend-overlay opacity-80"></div>
+              
+              {/* 屏幕微闪烁动画 */}
+              <div className="absolute inset-0 bg-white opacity-[0.02] pointer-events-none animate-flicker"></div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* --- 控制面板 DOM --- */}
+        <div 
+          className="absolute flex flex-col items-center"
+          style={{
+            top: '17%',
+            right: '4.5%', // 调整到右侧面板区域
+            width: '15%',
+            height: '66%'
+          }}
+        >
+          {/* 频道旋钮 */}
+          <div className="relative mb-8">
+            <div 
+              className="w-24 h-24 rounded-full bg-[#111] shadow-[0_5px_10px_rgba(0,0,0,0.5),inset_0_2px_5px_rgba(255,255,255,0.1)] flex items-center justify-center cursor-pointer active:scale-95 transition-transform"
+              style={{ transform: `rotate(${currentChannel * 45}deg)` }}
+              onClick={() => changeChannel(1)}
+            >
+              <div className="w-20 h-20 rounded-full border-2 border-[#333] bg-[conic-gradient(from_0deg,#222,#444,#222)] shadow-inner relative">
+                {/* 旋钮指示条 */}
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 w-2 h-6 bg-[#d35400] rounded-sm shadow-[0_0_5px_#d35400]"></div>
+              </div>
+            </div>
+            <div className="absolute -bottom-6 w-full text-center">
+               <span className="text-[#888] text-[10px] font-bold tracking-widest bg-[#111] px-1 border border-[#333] rounded">UHF</span>
+            </div>
+          </div>
+
+          {/* 音量滑块 (复古样式) */}
+          <div className="w-full px-2 mb-8 group">
+            <div className="flex justify-between text-[#666] text-[10px] font-bold mb-1 px-1">
+              <span>MIN</span>
+              <span className={`text-[#d35400] transition-opacity ${isMuted ? 'opacity-100' : 'opacity-0'}`}>MUTE</span>
+              <span>MAX</span>
+            </div>
+            <div className="relative w-full h-8 bg-[#000] rounded border border-[#333] shadow-inner flex items-center px-2">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={volume} 
+                onChange={(e) => {
+                  setVolume(e.target.value);
+                  if(isMuted && e.target.value > 0) setIsMuted(false);
+                }}
+                className="w-full h-2 bg-[#333] rounded-lg appearance-none cursor-pointer accent-[#d35400] opacity-80 hover:opacity-100"
+              />
+            </div>
+          </div>
+
+          {/* 功能按钮组 */}
+          <div className="grid grid-cols-2 gap-3 w-full px-1 mb-auto">
+             <button 
+               onClick={toggleMute}
+               className={`aspect-square rounded bg-[#222] border-b-4 border-r-4 ${isMuted ? 'border-red-900 bg-red-900/20' : 'border-[#000]'} active:border-0 active:translate-y-1 active:translate-x-1 flex items-center justify-center text-gray-400 hover:text-white transition-all`}
+               title="Mute"
+             >
+               {isMuted ? <VolumeX size={16}/> : <Volume2 size={16}/>}
+             </button>
+             <button 
+               onClick={() => selectChannel(0)}
+               className="aspect-square rounded bg-[#222] border-b-4 border-r-4 border-[#000] active:border-0 active:translate-y-1 active:translate-x-1 flex items-center justify-center text-gray-400 hover:text-blue-400 transition-all"
+               title="Menu"
+             >
+               <MenuIcon size={16}/>
+             </button>
+          </div>
+
+          {/* 电源开关 */}
+          <div className="mt-4 flex flex-col items-center">
+            <button 
+              onClick={togglePower}
+              className={`w-14 h-14 rounded-full border-4 shadow-[0_4px_10px_rgba(0,0,0,0.6)] flex items-center justify-center transition-all duration-300 active:scale-95 ${
+                isOn 
+                  ? 'bg-[#1b5e20] border-[#0d3311] text-[#4ade80] shadow-[0_0_15px_rgba(74,222,128,0.4)]' 
+                  : 'bg-[#b71c1c] border-[#7f1d1d] text-[#ffcdd2]'
+              }`}
+            >
+              <Power size={24} strokeWidth={3} />
+            </button>
+            <span className="text-[#666] text-[10px] font-bold mt-2 tracking-widest">POWER</span>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* CSS 动画定义 (内联 style 注入) */}
+      <style>{`
+        @keyframes flicker {
+          0% { opacity: 0.02; }
+          5% { opacity: 0.05; }
+          10% { opacity: 0.02; }
+          15% { opacity: 0.06; }
+          20% { opacity: 0.02; }
+          100% { opacity: 0.02; }
+        }
+        
+        /* 经典的 CRT 关机动画：先横向压缩成一条线，再纵向压缩成一个点 */
+        @keyframes turnOff {
+          0% { transform: scale(1, 1); filter: brightness(1); opacity: 1; }
+          40% { transform: scale(1, 0.002); filter: brightness(3); opacity: 1; }
+          70% { transform: scale(0.01, 0.002); filter: brightness(10); opacity: 1; }
+          100% { transform: scale(0, 0); filter: brightness(20); opacity: 0; }
+        }
+
+        /* 开机动画：从中间一个点展开 */
+        @keyframes turnOn {
+          0% { transform: scale(0.01, 0.002); filter: brightness(30); opacity: 0; }
+          30% { transform: scale(1, 0.002); filter: brightness(5); opacity: 1; }
+          100% { transform: scale(1, 1); filter: brightness(1); opacity: 1; }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #000055; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #fff; 
+          border: 1px solid #0000AA;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default UltimateRetroTV;
